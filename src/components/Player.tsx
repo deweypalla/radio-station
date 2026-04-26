@@ -221,7 +221,7 @@ export function SpotifyPlaybackPanel() {
       player.removeListener("authentication_error", onSdkMessage);
       player.removeListener("account_error", onSdkMessage);
       player.removeListener("playback_error", onPlaybackError);
-      player.removeListener("autoplay_failed", onAutoplayFailed);
+      // "autoplay_failed" is supported by addListener but missing from removeListener in @types/spotify-web-playback-sdk; disconnect drops all listeners.
       void player.disconnect();
       setDeviceId(null);
       setPlayerHandle(null);

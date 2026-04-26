@@ -1,5 +1,6 @@
 import { SpotifyApi } from "@spotify/web-api-ts-sdk";
 import type { AccessToken, Track } from "@spotify/web-api-ts-sdk";
+import type { NextRequest } from "next/server";
 import { getPrisma } from "@/lib/db";
 
 export const SPOTIFY_AUTH_SCOPES = [
@@ -77,7 +78,8 @@ export function getPublicRequestOrigin(request: Request): string {
   const forwarded = originFromForwardedHeaders(request);
   if (forwarded) return forwarded;
 
-  const nextUrl = "nextUrl" in request && request.nextUrl ? request.nextUrl : undefined;
+  const nextUrl: URL | undefined =
+    "nextUrl" in request ? (request as NextRequest).nextUrl : undefined;
   if (nextUrl?.origin && nextUrl.origin !== "null") return nextUrl.origin;
 
   try {
