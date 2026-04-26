@@ -262,9 +262,11 @@ export function SpotifyPlaybackPanel() {
   /** Resume only after Spotify has a loaded track; avoids SDK "no list was loaded" from blind resume(). */
   useEffect(() => {
     if (!broadcastOn || !playerHandle) return;
+    if (radioPhaseRef.current === "station_id") return;
 
     const id = window.setTimeout(() => {
       void (async () => {
+        if (radioPhaseRef.current === "station_id") return;
         try {
           try {
             await playerHandle.activateElement();
