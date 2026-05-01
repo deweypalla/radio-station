@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { ensureSettingsRow } from "@/lib/db";
-import { clearSpotifyTokens } from "@/lib/spotify";
+import { clearSpotifyAuthCookies } from "@/lib/spotify";
 
 export async function POST() {
   try {
     await ensureSettingsRow();
-    await clearSpotifyTokens();
+    await clearSpotifyAuthCookies();
     return NextResponse.json({ ok: true });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";

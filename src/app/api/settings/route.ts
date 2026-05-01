@@ -1,20 +1,17 @@
 import { NextResponse } from "next/server";
-import { ensureSettingsRow, getPrisma } from "@/lib/db";
-import { normalizeSpotifyPlaylistId } from "@/lib/spotify";
+import { ensureSettingsRow, getSettings, patchSettings } from "@/lib/db";
+import { hasSpotifyUserAuth, normalizeSpotifyPlaylistId } from "@/lib/spotify";
 
 export async function GET() {
   try {
     await ensureSettingsRow();
-    const prisma = getPrisma();
-    const row = await prisma.settings.findUnique({ where: { id: 1 } });
-    if (!row) {
-      return NextResponse.json({ error: "Settings not found" }, { status: 500 });
-    }
+    const row = await getSettings();
+    const hasAuthToken = await hasSpotifyUserAuth();
     return NextResponse.json({
       spotifyPlaylistId: row.spotifyPlaylistId,
       currentSongCount: row.currentSongCount,
       stationBreakTarget: row.stationBreakTarget,
-      hasAuthToken: Boolean(row.spotifyRefreshToken?.length),
+      hasAuthToken,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";
@@ -104,17 +101,14 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
-    const prisma = getPrisma();
-    const row = await prisma.settings.update({
-      where: { id: 1 },
-      data,
-    });
+    const row = await patchSettings(data);
+    const hasAuthToken = await hasSpotifyUserAuth();
 
     return NextResponse.json({
       spotifyPlaylistId: row.spotifyPlaylistId,
       currentSongCount: row.currentSongCount,
       stationBreakTarget: row.stationBreakTarget,
-      hasAuthToken: Boolean(row.spotifyRefreshToken?.length),
+      hasAuthToken,
     });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Unknown error";

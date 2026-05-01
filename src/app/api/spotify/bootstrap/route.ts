@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureSettingsRow, getPrisma } from "@/lib/db";
+import { ensureSettingsRow, getSettings } from "@/lib/db";
 import {
   collectPlaylistTrackUris,
   fetchTrackMeta,
@@ -28,9 +28,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "deviceId is required" }, { status: 400 });
     }
 
-    const prisma = getPrisma();
-    const settings = await prisma.settings.findUnique({ where: { id: 1 } });
-    const playlistRaw = settings?.spotifyPlaylistId ?? null;
+    const settings = await getSettings();
+    const playlistRaw = settings.spotifyPlaylistId ?? null;
     const playlistId = normalizeSpotifyPlaylistId(playlistRaw);
     if (!playlistId) {
       return NextResponse.json(

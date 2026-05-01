@@ -3,15 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --hostname 127.0.0.1 --port 3000",
-    "build": "prisma generate && next build",
+    "dev": "next dev --webpack --hostname 127.0.0.1 --port 3000",
+    "build": "next build",
     "start": "next start --hostname 127.0.0.1 --port 3000",
-    "lint": "eslint",
-    "postinstall": "prisma generate"
+    "lint": "eslint"
   },
   "dependencies": {
-    "@libsql/client": "^0.17.3",
-    "@prisma/client": "^6.19.3",
     "@spotify/web-api-ts-sdk": "^1.2.0",
     "next": "16.2.4",
     "react": "19.2.4",
@@ -25,7 +22,6 @@
     "@types/spotify-web-playback-sdk": "^0.1.19",
     "eslint": "^9",
     "eslint-config-next": "16.2.4",
-    "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

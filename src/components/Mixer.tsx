@@ -1,6 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useState,
+  type FormEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react";
+
+function openSpotifyOAuth(e: ReactMouseEvent) {
+  e.preventDefault();
+  e.stopPropagation();
+  window.location.assign("/api/auth/spotify");
+}
 
 type SettingsPayload = {
   spotifyPlaylistId: string | null;
@@ -114,12 +126,14 @@ export function Mixer({
             {settings?.hasAuthToken ? (
               <div className="flex flex-wrap items-center gap-3">
                 <span className="text-sm text-emerald-400">Connected</span>
-                <a
-                  href="/api/auth/spotify"
+                <button
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={openSpotifyOAuth}
                   className="text-sm text-amber-400 underline hover:text-amber-300"
                 >
                   Re-authorize
-                </a>
+                </button>
                 <button
                   type="button"
                   onClick={() => void onDisconnect()}
@@ -129,12 +143,14 @@ export function Mixer({
                 </button>
               </div>
             ) : (
-              <a
-                href="/api/auth/spotify"
+              <button
+                type="button"
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={openSpotifyOAuth}
                 className="inline-flex min-h-11 items-center justify-center rounded-full bg-[#1DB954] px-5 py-2 text-sm font-medium text-black hover:opacity-90"
               >
                 Connect with Spotify
-              </a>
+              </button>
             )}
           </section>
 

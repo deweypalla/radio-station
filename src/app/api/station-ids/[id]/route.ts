@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ensureSettingsRow, getPrisma } from "@/lib/db";
+import { ensureSettingsRow, patchStationIdById } from "@/lib/db";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -19,13 +19,12 @@ export async function PATCH(request: Request, context: RouteContext) {
     const body = (await request.json()) as PatchBody;
 
     await ensureSettingsRow();
-    const prisma = getPrisma();
 
     if (body.incrementPlayCount === true) {
-      const row = await prisma.stationID.update({
-        where: { id },
-        data: { playCount: { increment: 1 } },
-      });
+      const row = await patchStationIdById(id, { incrementPlayCount: true });
+      if (!row) {
+        return NextResponse.json({ error: "Station ID not found" }, { status: 404 });
+      }
       return NextResponse.json({
         id: row.id,
         fileName: row.fileName,
@@ -44,10 +43,10 @@ export async function PATCH(request: Request, context: RouteContext) {
       if (body.playCount < 0) {
         return NextResponse.json({ error: "playCount must be >= 0" }, { status: 400 });
       }
-      const row = await prisma.stationID.update({
-        where: { id },
-        data: { playCount: body.playCount },
-      });
+      const row = await patchStationIdById(id, { playCount: body.playCount });
+      if (!row) {
+        return NextResponse.json({ error: "Station ID not found" }, { status: 404 });
+      }
       return NextResponse.json({
         id: row.id,
         fileName: row.fileName,
@@ -61,10 +60,6 @@ export async function PATCH(request: Request, context: RouteContext) {
       { status: 400 },
     );
   } catch (e) {
-    const code = e && typeof e === "object" && "code" in e ? (e as { code: string }).code : "";
-    if (code === "P2025") {
-      return NextResponse.json({ error: "Station ID not found" }, { status: 404 });
-    }
     const message = e instanceof Error ? e.message : "Unknown error";
     return NextResponse.json({ error: message }, { status: 500 });
   }

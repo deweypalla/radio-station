@@ -26,7 +26,7 @@
 
 # debug
 npm-debug.log*
-yarn-debug.log*
+yarn-debug.log*v
 yarn-error.log*
 .pnpm-debug.log*
 
@@ -41,8 +41,5 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# prisma local SQLite
-/prisma/dev.db
-/prisma/dev.db-journal
-# nested path if DATABASE_URL was resolved from wrong cwd
-/prisma/prisma/
+# Local runtime config (tokens, playlist id — never commit)
+/data/radio-config.json

@@ -1,7 +1,7 @@
 import { SpotifyApi } from "@spotify/web-api-ts-sdk";
 import type { AccessToken, Track } from "@spotify/web-api-ts-sdk";
-import type { NextRequest } from "next/server";
-import { getPrisma } from "@/lib/db";
+import type { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
 
 export const SPOTIFY_AUTH_SCOPES = [
   "streaming",
@@ -190,35 +190,58 @@ export async function refreshAccessToken(refreshToken: string): Promise<TokenEnd
   return postToken(body);
 }
 
-export async function persistSpotifyTokens(tokens: TokenEndpointResponse): Promise<void> {
-  const prisma = getPrisma();
-  const row = await prisma.settings.findUnique({ where: { id: 1 } });
-  const refresh =
-    tokens.refresh_token?.length ? tokens.refresh_token : row?.spotifyRefreshToken ?? null;
-  if (!refresh) {
-    throw new Error("Spotify refresh token missing");
-  }
-  const expiresAtMs = Date.now() + tokens.expires_in * 1000;
-  await prisma.settings.update({
-    where: { id: 1 },
-    data: {
-      spotifyAccessToken: tokens.access_token,
-      spotifyRefreshToken: refresh,
-      spotifyAccessExpiresAt: BigInt(expiresAtMs),
-    },
-  });
+/** HttpOnly cookies for Spotify user OAuth (not stored in radio-config.json). */
+const SPOTIFY_COOKIE_RT = "spotify_user_rt";
+const SPOTIFY_COOKIE_AT = "spotify_user_at";
+const SPOTIFY_COOKIE_EXP = "spotify_user_exp";
+
+function spotifyAuthCookieBase() {
+  return {
+    httpOnly: true as const,
+    path: "/" as const,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+  };
 }
 
-export async function clearSpotifyTokens(): Promise<void> {
-  const prisma = getPrisma();
-  await prisma.settings.update({
-    where: { id: 1 },
-    data: {
-      spotifyAccessToken: null,
-      spotifyRefreshToken: null,
-      spotifyAccessExpiresAt: null,
-    },
-  });
+export async function hasSpotifyUserAuth(): Promise<boolean> {
+  const store = await cookies();
+  return Boolean(store.get(SPOTIFY_COOKIE_RT)?.value?.trim());
+}
+
+export function setSpotifyAuthCookiesOnResponse(
+  res: NextResponse,
+  tokens: TokenEndpointResponse,
+): void {
+  const base = spotifyAuthCookieBase();
+  const refresh = tokens.refresh_token?.trim();
+  if (!refresh) {
+    throw new Error("Spotify did not return a refresh token; reconnect from the Mixer.");
+  }
+  const expMs = Date.now() + tokens.expires_in * 1000;
+  res.cookies.set(SPOTIFY_COOKIE_RT, refresh, { ...base, maxAge: 60 * 60 * 24 * 365 });
+  res.cookies.set(SPOTIFY_COOKIE_AT, tokens.access_token, { ...base, maxAge: tokens.expires_in });
+  res.cookies.set(SPOTIFY_COOKIE_EXP, String(expMs), { ...base, maxAge: tokens.expires_in });
+}
+
+async function writeSpotifyAuthCookies(
+  tokens: TokenEndpointResponse,
+  fallbackRefreshToken: string,
+): Promise<void> {
+  const store = await cookies();
+  const base = spotifyAuthCookieBase();
+  const refresh = tokens.refresh_token?.trim() || fallbackRefreshToken;
+  const expMs = Date.now() + tokens.expires_in * 1000;
+  store.set(SPOTIFY_COOKIE_RT, refresh, { ...base, maxAge: 60 * 60 * 24 * 365 });
+  store.set(SPOTIFY_COOKIE_AT, tokens.access_token, { ...base, maxAge: tokens.expires_in });
+  store.set(SPOTIFY_COOKIE_EXP, String(expMs), { ...base, maxAge: tokens.expires_in });
+}
+
+export async function clearSpotifyAuthCookies(): Promise<void> {
+  const store = await cookies();
+  store.delete({ name: SPOTIFY_COOKIE_RT, path: "/" });
+  store.delete({ name: SPOTIFY_COOKIE_AT, path: "/" });
+  store.delete({ name: SPOTIFY_COOKIE_EXP, path: "/" });
 }
 
 /** Accepts raw ID, Spotify URI, or open.spotify.com playlist URL. */
@@ -243,49 +266,31 @@ export type SpotifyAccessState = {
 };
 
 /**
- * Returns a valid access token, refreshing with the client secret on the server when needed.
- * Spotify’s SDK default refresh uses only client_id; we keep refresh here so confidential apps work.
+ * Returns a valid user access token (Web Playback / user Web API), refreshing with
+ * `SPOTIFY_CLIENT_ID` + `SPOTIFY_CLIENT_SECRET` when needed. Tokens live in httpOnly cookies only.
  */
 export async function getSpotifyAccessState(): Promise<SpotifyAccessState | null> {
-  const prisma = getPrisma();
-  const row = await prisma.settings.findUnique({ where: { id: 1 } });
-  if (!row?.spotifyRefreshToken) return null;
+  const store = await cookies();
+  const refreshToken = store.get(SPOTIFY_COOKIE_RT)?.value?.trim() ?? "";
+  if (!refreshToken) return null;
 
-  const expiresAtMs = row.spotifyAccessExpiresAt != null ? Number(row.spotifyAccessExpiresAt) : null;
+  let accessToken = store.get(SPOTIFY_COOKIE_AT)?.value ?? "";
+  let expiresAtMs = Number(store.get(SPOTIFY_COOKIE_EXP)?.value ?? 0);
+
   if (
-    row.spotifyAccessToken &&
-    expiresAtMs != null &&
-    expiresAtMs > Date.now() + ACCESS_REFRESH_BUFFER_MS
+    !accessToken ||
+    !Number.isFinite(expiresAtMs) ||
+    expiresAtMs <= Date.now() + ACCESS_REFRESH_BUFFER_MS
   ) {
-    return {
-      accessToken: row.spotifyAccessToken,
-      expiresAtMs,
-      refreshToken: row.spotifyRefreshToken,
-    };
+    const refreshed = await refreshAccessToken(refreshToken);
+    await writeSpotifyAuthCookies(refreshed, refreshToken);
+    accessToken = refreshed.access_token;
+    expiresAtMs = Date.now() + refreshed.expires_in * 1000;
+    const newRt = refreshed.refresh_token?.trim() || refreshToken;
+    return { accessToken, expiresAtMs, refreshToken: newRt };
   }
 
-  const refreshed = await refreshAccessToken(row.spotifyRefreshToken);
-  await persistSpotifyTokens({
-    ...refreshed,
-    refresh_token: refreshed.refresh_token ?? row.spotifyRefreshToken,
-  });
-
-  const updated = await prisma.settings.findUnique({ where: { id: 1 } });
-  const updatedExpiresMs =
-    updated?.spotifyAccessExpiresAt != null ? Number(updated.spotifyAccessExpiresAt) : null;
-  if (
-    !updated?.spotifyAccessToken ||
-    updatedExpiresMs == null ||
-    !updated.spotifyRefreshToken
-  ) {
-    return null;
-  }
-
-  return {
-    accessToken: updated.spotifyAccessToken,
-    expiresAtMs: updatedExpiresMs,
-    refreshToken: updated.spotifyRefreshToken,
-  };
+  return { accessToken, expiresAtMs, refreshToken };
 }
 
 export async function getUserSpotifyApi(): Promise<SpotifyApi | null> {

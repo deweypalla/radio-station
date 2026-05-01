@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
-import { ensureSettingsRow, getPrisma, syncStationIdsFromPublicAudio } from "@/lib/db";
+import {
+  ensureSettingsRow,
+  listStationIdsOrderedByFileName,
+  syncStationIdsFromPublicAudio,
+} from "@/lib/db";
 
 export async function GET() {
   try {
     await ensureSettingsRow();
     await syncStationIdsFromPublicAudio();
-    const prisma = getPrisma();
-    const items = await prisma.stationID.findMany({
-      orderBy: { fileName: "asc" },
-    });
+    const items = await listStationIdsOrderedByFileName();
     return NextResponse.json({
       items: items.map((r) => ({
         id: r.id,

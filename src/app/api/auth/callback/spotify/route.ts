@@ -3,8 +3,8 @@ import { type NextRequest, NextResponse } from "next/server";
 import { ensureSettingsRow } from "@/lib/db";
 import {
   exchangeAuthorizationCode,
-  persistSpotifyTokens,
   resolveSpotifyRedirectUriForCallback,
+  setSpotifyAuthCookiesOnResponse,
   SPOTIFY_OAUTH_REDIRECT_COOKIE,
 } from "@/lib/spotify";
 
@@ -43,8 +43,9 @@ export async function GET(request: NextRequest) {
     await ensureSettingsRow();
     const redirectUri = resolveSpotifyRedirectUriForCallback(request, storedRedirect);
     const tokens = await exchangeAuthorizationCode(code, redirectUri);
-    await persistSpotifyTokens(tokens);
-    return NextResponse.redirect(new URL("/?spotify=connected", origin));
+    const res = NextResponse.redirect(new URL("/?spotify=connected", origin));
+    setSpotifyAuthCookiesOnResponse(res, tokens);
+    return res;
   } catch (e) {
     const message = e instanceof Error ? e.message : "token_exchange_failed";
     return NextResponse.redirect(
