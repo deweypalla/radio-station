@@ -5,9 +5,9 @@ import {
   fetchTrackMeta,
   formatSpotifyClientError,
   getUserSpotifyApi,
-  normalizeSpotifyPlaylistId,
   pickRandomUri,
   playPlaylistFromTrackUri,
+  resolvedSpotifyPlaylistId,
   waitForPlayerDeviceVisible,
 } from "@/lib/spotify";
 
@@ -29,14 +29,7 @@ export async function POST(request: Request) {
     }
 
     const settings = await getSettings();
-    const playlistRaw = settings.spotifyPlaylistId ?? null;
-    const playlistId = normalizeSpotifyPlaylistId(playlistRaw);
-    if (!playlistId) {
-      return NextResponse.json(
-        { error: "Set a Spotify playlist ID in settings first" },
-        { status: 400 },
-      );
-    }
+    const playlistId = resolvedSpotifyPlaylistId(settings.spotifyPlaylistId);
 
     const api = await getUserSpotifyApi();
     if (!api) {

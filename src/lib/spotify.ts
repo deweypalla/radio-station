@@ -3,6 +3,13 @@ import type { AccessToken, Track } from "@spotify/web-api-ts-sdk";
 import type { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
+export {
+  DEFAULT_CROSSOVER_PLAYLIST_WEB_URL,
+  DEFAULT_SPOTIFY_PLAYLIST_ID,
+  normalizeSpotifyPlaylistId,
+  resolvedSpotifyPlaylistId,
+} from "./spotifyPlaylist";
+
 export const SPOTIFY_AUTH_SCOPES = [
   "streaming",
   "user-read-email",
@@ -242,19 +249,6 @@ export async function clearSpotifyAuthCookies(): Promise<void> {
   store.delete({ name: SPOTIFY_COOKIE_RT, path: "/" });
   store.delete({ name: SPOTIFY_COOKIE_AT, path: "/" });
   store.delete({ name: SPOTIFY_COOKIE_EXP, path: "/" });
-}
-
-/** Accepts raw ID, Spotify URI, or open.spotify.com playlist URL. */
-export function normalizeSpotifyPlaylistId(input: string | null | undefined): string | null {
-  if (input == null) return null;
-  const t = input.trim();
-  if (!t) return null;
-  const urlMatch = t.match(/playlist\/([a-zA-Z0-9]+)/);
-  if (urlMatch) return urlMatch[1];
-  const uriMatch = t.match(/spotify:playlist:([a-zA-Z0-9]+)/);
-  if (uriMatch) return uriMatch[1];
-  if (/^[a-zA-Z0-9]+$/.test(t)) return t;
-  return t;
 }
 
 const ACCESS_REFRESH_BUFFER_MS = 60_000;

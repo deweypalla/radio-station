@@ -6,6 +6,10 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { useRadio } from "@/hooks/useRadio";
 import { Mixer } from "@/components/Mixer";
 import { RadioFace } from "@/components/RadioFace";
+import {
+  DEFAULT_CROSSOVER_PLAYLIST_WEB_URL,
+  resolvedSpotifyPlaylistId,
+} from "@/lib/spotifyPlaylist";
 
 type SettingsPayload = {
   spotifyPlaylistId: string | null;
@@ -40,6 +44,7 @@ export function SpotifyPlaybackPanel() {
   const [uiVolume, setUiVolume] = useState(0.85);
   const stationAudioRef = useRef<HTMLAudioElement | null>(null);
   const radioPhaseRef = useRef<"music" | "station_id">("music");
+  const lastSdkTrackIdRef = useRef<string | null>(null);
   const volumeRef = useRef(uiVolume);
   volumeRef.current = uiVolume;
 
@@ -48,7 +53,8 @@ export function SpotifyPlaybackPanel() {
       .then((s) => {
         setSettings(s);
         setSettingsError(null);
-        setPlaylistDraft(s.spotifyPlaylistId ?? "");
+        const stored = s.spotifyPlaylistId?.trim();
+        setPlaylistDraft(stored && stored !== "" ? stored : DEFAULT_CROSSOVER_PLAYLIST_WEB_URL);
       })
       .catch((e: unknown) => {
         setSettingsError(e instanceof Error ? e.message : "Settings error");
@@ -72,7 +78,7 @@ export function SpotifyPlaybackPanel() {
     deviceId,
     player: playerHandle,
     hasAuthToken: Boolean(settings?.hasAuthToken),
-    playlistId: settings?.spotifyPlaylistId ?? null,
+    playlistId: resolvedSpotifyPlaylistId(settings?.spotifyPlaylistId),
     settings: {
       currentSongCount: settings?.currentSongCount ?? 0,
       stationBreakTarget: settings?.stationBreakTarget ?? null,
@@ -186,15 +192,18 @@ export function SpotifyPlaybackPanel() {
       if (!inStation) {
         const t = state?.track_window?.current_track;
         if (t) {
-          setPanelError(null);
-          setNowPlaying({
-            name: t.name,
-            artists: t.artists.map((a) => a.name).join(", "),
-          });
+          if (lastSdkTrackIdRef.current !== t.id) {
+            lastSdkTrackIdRef.current = t.id;
+            setPanelError(null);
+            setNowPlaying({
+              name: t.name,
+              artists: t.artists.map((a) => a.name).join(", "),
+            });
+          }
         }
       }
       if (state) {
-        setSpotifyTransportPaused(state.paused);
+        setSpotifyTransportPaused((prev) => (prev === state.paused ? prev : state.paused));
       }
     };
 
@@ -228,8 +237,10 @@ export function SpotifyPlaybackPanel() {
     };
   }, [sdkReady, settings?.hasAuthToken]);
 
+  const effectivePlaylistId = resolvedSpotifyPlaylistId(settings?.spotifyPlaylistId);
+
   useEffect(() => {
-    if (!deviceId || !settings?.hasAuthToken || !settings.spotifyPlaylistId) return;
+    if (!deviceId || !settings?.hasAuthToken) return;
 
     let cancelled = false;
     void (async () => {
@@ -257,7 +268,7 @@ export function SpotifyPlaybackPanel() {
     return () => {
       cancelled = true;
     };
-  }, [deviceId, settings?.hasAuthToken, settings?.spotifyPlaylistId]);
+  }, [deviceId, settings?.hasAuthToken, effectivePlaylistId]);
 
   /** Resume only after Spotify has a loaded track; avoids SDK "no list was loaded" from blind resume(). */
   useEffect(() => {
@@ -285,7 +296,7 @@ export function SpotifyPlaybackPanel() {
     }, 0);
 
     return () => clearTimeout(id);
-  }, [broadcastOn, playerHandle, radioPhase, nowPlaying?.name, nowPlaying?.artists]);
+  }, [broadcastOn, playerHandle, radioPhase]);
 
   async function savePlaylist(e: FormEvent) {
     e.preventDefault();
@@ -357,17 +368,13 @@ export function SpotifyPlaybackPanel() {
 
   const blockTarget = settings?.stationBreakTarget;
   const blockProgress = settings?.currentSongCount ?? 0;
-  const powerReady = Boolean(
-    settings?.hasAuthToken && settings.spotifyPlaylistId && deviceId,
-  );
+  const powerReady = Boolean(settings?.hasAuthToken && deviceId && effectivePlaylistId);
   const transportDisabled =
     !powerReady || !broadcastOn || radioPhase === "station_id";
   const displayError = settingsError ?? panelError;
 
   const standbyMessage = (() => {
     if (!settings?.hasAuthToken) return "Open the mixer (≡) and connect Spotify.";
-    if (!settings.spotifyPlaylistId?.trim())
-      return "Open the mixer (≡) and save a playlist ID.";
     if (!deviceId) return "Connecting Spotify in this browser…";
     if (!nowPlaying) {
       if (!broadcastOn) {

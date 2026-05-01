@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { ensureSettingsRow, getSettings, patchSettings } from "@/lib/db";
-import { hasSpotifyUserAuth, normalizeSpotifyPlaylistId } from "@/lib/spotify";
+import {
+  DEFAULT_SPOTIFY_PLAYLIST_ID,
+  normalizeSpotifyPlaylistId,
+} from "@/lib/spotifyPlaylist";
+import { hasSpotifyUserAuth } from "@/lib/spotify";
 
 export async function GET() {
   try {
@@ -48,8 +52,17 @@ export async function PATCH(request: Request) {
         data.spotifyPlaylistId = null;
       } else {
         const raw = body.spotifyPlaylistId.trim();
-        data.spotifyPlaylistId =
-          raw === "" ? null : normalizeSpotifyPlaylistId(raw);
+        if (raw === "") {
+          data.spotifyPlaylistId = null;
+        } else {
+          const normalized = normalizeSpotifyPlaylistId(raw);
+          data.spotifyPlaylistId =
+            normalized == null
+              ? null
+              : normalized === DEFAULT_SPOTIFY_PLAYLIST_ID
+                ? null
+                : normalized;
+        }
       }
     }
 

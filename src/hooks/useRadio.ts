@@ -62,6 +62,8 @@ export function useRadio({
   const listenerPlayerRef = useRef<Spotify.Player | null>(null);
   /** Completes the current station-ID segment (increment + resume Spotify); no-op if none active. */
   const completeStationSegmentRef = useRef<(() => Promise<void>) | null>(null);
+  /** Serializes async work from Spotify `player_state_changed` (callbacks are not awaited by the SDK). */
+  let stateHandlingChain = Promise.resolve();
 
   broadcastOnRef.current = broadcastOn;
   deviceIdRef.current = deviceId;
@@ -229,42 +231,46 @@ export function useRadio({
       }
     };
 
-    const onState = async (state: Spotify.PlaybackState | null) => {
-      if (!broadcastOnRef.current || playingStationRef.current) return;
-      if (!hasAuthTokenRef.current || !playlistIdRef.current) return;
+    const onState = (state: Spotify.PlaybackState | null) => {
+      stateHandlingChain = stateHandlingChain
+        .then(async () => {
+          if (!broadcastOnRef.current || playingStationRef.current) return;
+          if (!hasAuthTokenRef.current || !playlistIdRef.current) return;
 
-      const cur = state?.track_window?.current_track?.id ?? null;
-      if (!cur) return;
+          const cur = state?.track_window?.current_track?.id ?? null;
+          if (!cur) return;
 
-      if (skipNextTransitionRef.current) {
-        skipNextTransitionRef.current = false;
-        lastSpotifyTrackIdRef.current = cur;
-        return;
-      }
+          if (skipNextTransitionRef.current) {
+            skipNextTransitionRef.current = false;
+            lastSpotifyTrackIdRef.current = cur;
+            return;
+          }
 
-      const prev = lastSpotifyTrackIdRef.current;
-      if (prev === null) {
-        lastSpotifyTrackIdRef.current = cur;
-        return;
-      }
-      if (prev === cur) return;
+          const prev = lastSpotifyTrackIdRef.current;
+          if (prev === null) {
+            lastSpotifyTrackIdRef.current = cur;
+            return;
+          }
+          if (prev === cur) return;
 
-      lastSpotifyTrackIdRef.current = cur;
+          lastSpotifyTrackIdRef.current = cur;
 
-      let ctx = settingsRef.current;
-      let target = ctx.stationBreakTarget;
-      if (target !== 5 && target !== 6) {
-        ctx = await applySettingsRef.current({ stationBreakTarget: randomBlockSize() });
-        target = ctx.stationBreakTarget;
-      }
-      if (target !== 5 && target !== 6) return;
+          let ctx = settingsRef.current;
+          let target = ctx.stationBreakTarget;
+          if (target !== 5 && target !== 6) {
+            ctx = await applySettingsRef.current({ stationBreakTarget: randomBlockSize() });
+            target = ctx.stationBreakTarget;
+          }
+          if (target !== 5 && target !== 6) return;
 
-      const newCount = ctx.currentSongCount + 1;
-      ctx = await applySettingsRef.current({ currentSongCount: newCount });
+          const newCount = ctx.currentSongCount + 1;
+          ctx = await applySettingsRef.current({ currentSongCount: newCount });
 
-      if (newCount >= target) {
-        await runStationBreak();
-      }
+          if (newCount >= target) {
+            await runStationBreak();
+          }
+        })
+        .catch(() => {});
     };
 
     player.addListener("player_state_changed", onState);

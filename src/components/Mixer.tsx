@@ -7,6 +7,10 @@ import {
   type FormEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import {
+  DEFAULT_CROSSOVER_PLAYLIST_WEB_URL,
+  DEFAULT_SPOTIFY_PLAYLIST_ID,
+} from "@/lib/spotifyPlaylist";
 
 function openSpotifyOAuth(e: ReactMouseEvent) {
   e.preventDefault();
@@ -177,6 +181,19 @@ export function Mixer({
                 {settings?.spotifyPlaylistId ? (
                   <span className="self-center text-xs text-zinc-500">
                     Saved: {settings.spotifyPlaylistId}
+                  </span>
+                ) : settings?.hasAuthToken ? (
+                  <span className="self-center text-xs text-zinc-500">
+                    Default: Crossover Classics (
+                    <a
+                      href={DEFAULT_CROSSOVER_PLAYLIST_WEB_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline hover:text-zinc-300"
+                    >
+                      {DEFAULT_SPOTIFY_PLAYLIST_ID}
+                    </a>
+                    )
                   </span>
                 ) : null}
               </div>
