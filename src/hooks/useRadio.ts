@@ -77,6 +77,10 @@ export function useRadio({
     playingStationRef.current = false;
     completeStationSegmentRef.current = null;
     setPhase("music");
+    const p = playerRef.current;
+    if (p) {
+      void p.setVolume(Math.min(1, Math.max(0, stationVolumeRef.current))).catch(() => {});
+    }
     const a = audioRef.current;
     if (a) {
       a.pause();
@@ -100,6 +104,13 @@ export function useRadio({
 
       playingStationRef.current = true;
       setPhase("station_id");
+
+      /** Silence Web Playback immediately; Spotify can still slip tracks forward while "paused". */
+      try {
+        await p.setVolume(0);
+      } catch {
+        /* ignore */
+      }
 
       try {
         await p.pause();
@@ -128,24 +139,34 @@ export function useRadio({
       const items = data.items ?? [];
 
       const resumeSpotify = async () => {
+        const uiVol = Math.min(1, Math.max(0, stationVolumeRef.current));
+        const sdk = playerRef.current;
         skipNextTransitionRef.current = true;
         playingStationRef.current = false;
         setPhase("music");
         onStationNowPlayingRef.current(null);
-        const pr = await fetch("/api/spotify/play-random", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ deviceId: dev }),
-        });
-        const prJson = (await pr.json()) as {
-          track?: { name: string; artists: string };
-          error?: string;
-        };
-        if (prJson.track) {
-          onStationNowPlayingRef.current({
-            name: prJson.track.name,
-            artists: prJson.track.artists,
+        try {
+          const pr = await fetch("/api/spotify/play-random", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ deviceId: dev }),
           });
+          const prJson = (await pr.json()) as {
+            track?: { name: string; artists: string };
+            error?: string;
+          };
+          if (prJson.track) {
+            onStationNowPlayingRef.current({
+              name: prJson.track.name,
+              artists: prJson.track.artists,
+            });
+          }
+        } finally {
+          try {
+            await sdk?.setVolume(uiVol);
+          } catch {
+            /* ignore */
+          }
         }
       };
 

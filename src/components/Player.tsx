@@ -262,6 +262,7 @@ export function SpotifyPlaybackPanel() {
   /** Resume only after Spotify has a loaded track; avoids SDK "no list was loaded" from blind resume(). */
   useEffect(() => {
     if (!broadcastOn || !playerHandle) return;
+    if (radioPhase === "station_id") return;
     if (radioPhaseRef.current === "station_id") return;
 
     const id = window.setTimeout(() => {
@@ -284,7 +285,7 @@ export function SpotifyPlaybackPanel() {
     }, 0);
 
     return () => clearTimeout(id);
-  }, [broadcastOn, playerHandle, nowPlaying?.name, nowPlaying?.artists]);
+  }, [broadcastOn, playerHandle, radioPhase, nowPlaying?.name, nowPlaying?.artists]);
 
   async function savePlaylist(e: FormEvent) {
     e.preventDefault();
