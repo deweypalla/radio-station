@@ -1,4 +1,5 @@
 import { mkdir, readFile, readdir, rename, writeFile } from "fs/promises";
+import { tmpdir } from "node:os";
 import path from "path";
 
 /** Persisted settings + station-ID catalog (single JSON file on disk). */
@@ -38,6 +39,10 @@ function getConfigPath(): string {
   const override = process.env.RADIO_CONFIG_PATH?.trim();
   if (override) {
     return path.isAbsolute(override) ? override : path.join(process.cwd(), override);
+  }
+  // Vercel (and typical serverless) mounts the bundle read-only under process.cwd(); only /tmp is writable.
+  if (process.env.VERCEL) {
+    return path.join(tmpdir(), "radio-config.json");
   }
   return path.join(process.cwd(), "data", "radio-config.json");
 }
