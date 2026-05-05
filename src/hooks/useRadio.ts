@@ -60,6 +60,8 @@ export function useRadio({
   const hasAuthTokenRef = useRef(hasAuthToken);
   const playlistIdRef = useRef(playlistId);
   const listenerPlayerRef = useRef<Spotify.Player | null>(null);
+  /** Avoids playing the same station file twice in a row when multiple exist (server also excludes this id). */
+  const lastStationPickIdRef = useRef<number | null>(null);
   /** Completes the current station-ID segment (increment + resume Spotify); no-op if none active. */
   const completeStationSegmentRef = useRef<(() => Promise<void>) | null>(null);
   /** Serializes async work from Spotify `player_state_changed` (callbacks are not awaited by the SDK). */
@@ -136,9 +138,13 @@ export function useRadio({
         stationBreakTarget: nextTarget,
       });
 
-      const res = await fetch("/api/station-ids");
-      const data = (await res.json()) as { items?: StationItem[]; error?: string };
-      const items = data.items ?? [];
+      const excludeQ =
+        lastStationPickIdRef.current != null
+          ? `?exclude=${encodeURIComponent(String(lastStationPickIdRef.current))}`
+          : "";
+      const res = await fetch(`/api/station-ids/next${excludeQ}`, { cache: "no-store" });
+      const data = (await res.json()) as { item?: StationItem | null; error?: string };
+      const pick = data.item ?? null;
 
       const resumeSpotify = async () => {
         const uiVol = Math.min(1, Math.max(0, stationVolumeRef.current));
@@ -172,14 +178,14 @@ export function useRadio({
         }
       };
 
-      if (items.length === 0) {
+      if (!pick) {
         completeStationSegmentRef.current = null;
         onStationNowPlayingRef.current(null);
         await resumeSpotify();
         return;
       }
 
-      const pick = items[Math.floor(Math.random() * items.length)]!;
+      lastStationPickIdRef.current = pick.id;
       const label = pick.fileName.replace(/\.[^./\\]+$/, "");
       onStationNowPlayingRef.current({ name: label, artists: "Station ID" });
 
@@ -194,6 +200,7 @@ export function useRadio({
 
       audio.src = pick.filePath;
       audio.volume = Math.min(1, Math.max(0, stationVolumeRef.current));
+      audio.load();
 
       let segmentFinished = false;
       const finishSegment = async () => {
