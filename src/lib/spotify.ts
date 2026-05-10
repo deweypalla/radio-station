@@ -396,7 +396,12 @@ export async function playPlaylistFromTrackUri(
 
 export async function fetchTrackMeta(api: SpotifyApi, uri: string): Promise<{ name: string; artists: string }> {
   const id = uri.replace("spotify:track:", "");
-  const track = await api.tracks.get(id);
-  const artists = track.artists.map((a) => a.name).join(", ");
-  return { name: track.name, artists };
+  try {
+    const track = await api.tracks.get(id);
+    const artists = track.artists.map((a) => a.name).join(", ");
+    return { name: track.name, artists };
+  } catch {
+    /** Some tracks / API edge cases make the SDK throw (including JSON parse errors). Playback may still work. */
+    return { name: "Unknown track", artists: "" };
+  }
 }

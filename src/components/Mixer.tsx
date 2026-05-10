@@ -11,6 +11,7 @@ import {
   DEFAULT_CROSSOVER_PLAYLIST_WEB_URL,
   DEFAULT_SPOTIFY_PLAYLIST_ID,
 } from "@/lib/spotifyPlaylist";
+import { readResponseJson } from "@/lib/jsonResponse";
 
 function openSpotifyOAuth(e: ReactMouseEvent) {
   e.preventDefault();
@@ -65,7 +66,7 @@ export function Mixer({
     setStationError(null);
     try {
       const res = await fetch("/api/station-ids");
-      const data = (await res.json()) as { items?: StationRow[]; error?: string };
+      const data = (await readResponseJson(res)) as { items?: StationRow[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to load station IDs");
       setStationItems(data.items ?? []);
     } catch (e) {
@@ -85,7 +86,7 @@ export function Mixer({
     setStationError(null);
     try {
       const res = await fetch("/api/station-ids/sync", { method: "POST" });
-      const data = (await res.json()) as { items?: StationRow[]; error?: string };
+      const data = (await readResponseJson(res)) as { items?: StationRow[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "Sync failed");
       setStationItems(data.items ?? []);
     } catch (e) {

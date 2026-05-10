@@ -10,6 +10,7 @@ import {
   DEFAULT_CROSSOVER_PLAYLIST_WEB_URL,
   resolvedSpotifyPlaylistId,
 } from "@/lib/spotifyPlaylist";
+import { readResponseJson } from "@/lib/jsonResponse";
 
 type SettingsPayload = {
   spotifyPlaylistId: string | null;
@@ -20,9 +21,22 @@ type SettingsPayload = {
 
 type NowPlaying = { name: string; artists: string };
 
+/** Web Playback SDK sometimes surfaces low-level JSON parse strings that are confusing in the UI. */
+function humanizeSpotifySdkMessage(message: string): string {
+  const m = message.trim();
+  if (
+    m.includes("Unexpected non-whitespace character after JSON") ||
+    m.includes("Unexpected end of JSON input") ||
+    m.includes("is not valid JSON")
+  ) {
+    return "Spotify reported a brief data glitch for this song. If playback sounds OK, ignore this; otherwise try Skip or toggle the radio off and on.";
+  }
+  return message;
+}
+
 async function readSettings(): Promise<SettingsPayload> {
   const res = await fetch("/api/settings");
-  const data = (await res.json()) as SettingsPayload & { error?: string };
+  const data = (await readResponseJson(res)) as SettingsPayload & { error?: string };
   if (!res.ok) throw new Error(data.error ?? "Failed to load settings");
   return data;
 }
@@ -67,7 +81,7 @@ export function SpotifyPlaybackPanel() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
-    const data = (await res.json()) as SettingsPayload & { error?: string };
+    const data = (await readResponseJson(res)) as SettingsPayload & { error?: string };
     if (!res.ok) throw new Error(data.error ?? "Settings update failed");
     setSettings(data);
     return data;
@@ -136,7 +150,7 @@ export function SpotifyPlaybackPanel() {
       getOAuthToken: (cb) => {
         void fetch("/api/spotify/player-token")
           .then(async (res) => {
-            const data = (await res.json()) as { accessToken?: string; error?: string };
+            const data = (await readResponseJson(res)) as { accessToken?: string; error?: string };
             if (!res.ok) {
               queueMicrotask(() =>
                 setPanelError(data.error ?? `Spotify token request failed (${res.status})`),
@@ -160,7 +174,11 @@ export function SpotifyPlaybackPanel() {
           .catch((e: unknown) => {
             queueMicrotask(() =>
               setPanelError(
-                e instanceof Error ? e.message : "Could not reach the server for a Spotify token.",
+                e instanceof SyntaxError
+                  ? "Could not read the Spotify token response. Try refreshing or reconnecting."
+                  : e instanceof Error
+                    ? e.message
+                    : "Could not reach the server for a Spotify token.",
               ),
             );
             cb("");
@@ -170,11 +188,11 @@ export function SpotifyPlaybackPanel() {
     });
 
     const onSdkMessage = ({ message }: { message: string }) => {
-      setPanelError(message);
+      setPanelError(humanizeSpotifySdkMessage(message));
     };
     const onPlaybackError = ({ message }: { message: string }) => {
       if (message.includes("no list was loaded")) return;
-      setPanelError(message);
+      setPanelError(humanizeSpotifySdkMessage(message));
     };
 
     const onReady = (ev: { device_id: string }) => {
@@ -250,7 +268,7 @@ export function SpotifyPlaybackPanel() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ deviceId }),
         });
-        const data = (await res.json()) as {
+        const data = (await readResponseJson(res)) as {
           track?: { name: string; artists: string };
           error?: string;
         };
@@ -310,7 +328,7 @@ export function SpotifyPlaybackPanel() {
           spotifyPlaylistId: playlistDraft.trim() === "" ? null : playlistDraft.trim(),
         }),
       });
-      const data = (await res.json()) as SettingsPayload & { error?: string };
+      const data = (await readResponseJson(res)) as SettingsPayload & { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Save failed");
       setSettings(data);
     } catch (err) {
@@ -326,7 +344,7 @@ export function SpotifyPlaybackPanel() {
     try {
       const res = await fetch("/api/spotify/disconnect", { method: "POST" });
       if (!res.ok) {
-        const data = (await res.json()) as { error?: string };
+        const data = (await readResponseJson(res)) as { error?: string };
         throw new Error(data.error ?? "Disconnect failed");
       }
       setNowPlaying(null);
@@ -360,7 +378,7 @@ export function SpotifyPlaybackPanel() {
     })
       .then(async (res) => {
         if (res.ok) return;
-        const data = (await res.json()) as { error?: string };
+        const data = (await readResponseJson(res)) as { error?: string };
         setPanelError(data.error ?? "Skip failed");
       })
       .catch(() => setPanelError("Skip failed"));

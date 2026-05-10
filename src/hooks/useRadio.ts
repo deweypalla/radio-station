@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { readResponseJson } from "@/lib/jsonResponse";
 
 export type RadioNowPlaying = { name: string; artists: string };
 
@@ -143,7 +144,7 @@ export function useRadio({
           ? `?exclude=${encodeURIComponent(String(lastStationPickIdRef.current))}`
           : "";
       const res = await fetch(`/api/station-ids/next${excludeQ}`, { cache: "no-store" });
-      const data = (await res.json()) as { item?: StationItem | null; error?: string };
+      const data = (await readResponseJson(res)) as { item?: StationItem | null; error?: string };
       const pick = data.item ?? null;
 
       const resumeSpotify = async () => {
@@ -159,7 +160,7 @@ export function useRadio({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ deviceId: dev }),
           });
-          const prJson = (await pr.json()) as {
+          const prJson = (await readResponseJson(pr)) as {
             track?: { name: string; artists: string };
             error?: string;
           };
